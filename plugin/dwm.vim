@@ -10,7 +10,7 @@
 " Name Of File: dwm.vim
 "  Description: Dynamic Window Manager behaviour for Vim
 "   Maintainer: Stanislas Polu (polu.stanislas at gmail dot com)
-" Last Changed: Tuesday, 22 August 2012
+" Last Changed: Tuesday, 23 August 2012
 "      Version: See g:dwm_version for version number.
 "        Usage: This file should reside in the plugin directory and be
 "               automatically sourced.
@@ -24,7 +24,7 @@ if exists("g:dwm_version") || &cp
   finish
 endif
 
-let g:dwm_version = "0.1.0"
+let g:dwm_version = "0.1.1"
 
 " Check for Vim version 700 or greater {{{1
 if v:version < 700
@@ -88,6 +88,11 @@ function! DWM_Ball()
 endfunction
 
 
+function! DWM_Full ()
+  exec 'sb ' .  bufnr('%')
+  on!
+endfunction
+
 function! DWM_New ()
   call DWM_Ball()
   vert topleft new
@@ -118,16 +123,19 @@ function! DWM_Focus()
 endfunction
 
 
+if !exists('g:dwm_map_keys')
+    let g:dwm_map_keys = 1
+endif
 
+if g:dwm_map_keys
+    map <C-N> :call DWM_New()<CR>
+    map <C-C> :call DWM_Close()<CR>
+    map <C-H> :call DWM_Focus()<CR>
+    map <C-L> :call DWM_Full()<CR>
+    " map <C-B> :call DWM_Ball()<CR>
+    map <C-J> <C-W>w
+    map <C-K> <C-W>W
+    map <C-B> :ls<CR>
+endif
 
-
-map <C-N> :call DWM_New()<CR>
-map <C-C> :call DWM_Close()<CR>
-map <C-F> :call DWM_Focus()<CR>
-" map <C-B> :call DWM_Ball()<CR>
-
-map <C-J> <C-W>w
-map <C-K> <C-W>W
-
-map <C-B> :ls<CR>
 
