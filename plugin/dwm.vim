@@ -1,11 +1,11 @@
 "==============================================================================
-"    Copyright: Copyright (C) 2012 Stanislas Polu
+"    Copyright: Copyright (C) 2012 Stanislas Polu an other Contributors
 "               Permission is hereby granted to use and distribute this code,
 "               with or without modifications, provided that this copyright
 "               notice is copied with it. Like anything else that's free,
-"               dwm.vim is provided *as is* and comes with no warranty of 
-"               any kind, either expressed or implied. In no event will the 
-"               copyright holder be liable for any damages resulting from 
+"               dwm.vim is provided *as is* and comes with no warranty of
+"               any kind, either expressed or implied. In no event will the
+"               copyright holder be liable for any damages resulting from
 "               the use of this software.
 " Name Of File: dwm.vim
 "  Description: Dynamic Window Manager behaviour for Vim
@@ -24,7 +24,7 @@ if exists("g:dwm_version") || &cp
   finish
 endif
 
-let g:dwm_version = "0.1.1"
+let g:dwm_version = "0.1.2"
 
 " Check for Vim version 700 or greater {{{1
 if v:version < 700
@@ -32,110 +32,156 @@ if v:version < 700
   finish
 endif
 
-" Script Array for storing Buffer order
-let s:dwm_bufs = []
+" All layout transformations assume the layout contains one master pane on the
+" left and an arbitrary number of stacked panes on the right
+" +--------+--------+
+" |        |   S1   |
+" |        +--------+
+" |   M    |   S3   |
+" |        +--------+
+" |        |   S3   |
+" +--------+--------+
 
-function! DWM_BufCount() 
-  let cnt = 0 
-  for nr in range(1,bufnr("$")) 
-    if buflisted(nr) 
-      let cnt += 1 
-    endif 
-  endfor 
-  return cnt 
-endfunction 
-
-function! DWM_SyncBufs()
-  for nr in range(1,bufnr('$'))
-    if buflisted(nr)
-      if index(s:dwm_bufs,nr) == -1
-        let s:dwm_bufs += [nr]
-      endif
-    endif
-  endfor
-  for r_idx in range(1,len(s:dwm_bufs))
-    let idx = len(s:dwm_bufs)-r_idx
-    if !(buflisted(s:dwm_bufs[idx])) 
-      " echo idx
-      call remove(s:dwm_bufs,idx) 
-    endif
-  endfor
-  " echo s:dwm_bufs
-endfunction
-
-function! DWM_TopBuf(buffer)
-  let b = a:buffer
-  let idx = index(s:dwm_bufs,b)
-  if idx != -1
-    call remove(s:dwm_bufs,idx)
-    call insert(s:dwm_bufs,b)
+" Move the current master pane to the stack
+function! DWM_Stack(clockwise)
+  1wincmd w
+  if a:clockwise
+    " Move to the top of the stack
+    wincmd K
+  else
+    " Move to the bottom of the stack
+    wincmd J
   endif
-  " echo s:dwm_bufs
+  " At this point, the layout *should* be the following with the previous master
+  " at the top.
+  " +-----------------+
+  " |        M        |
+  " +-----------------+
+  " |        S1       |
+  " +-----------------+
+  " |        S2       |
+  " +-----------------+
+  " |        S3       |
+  " +-----------------+
 endfunction
 
-
-function! DWM_Ball()
-  call DWM_SyncBufs()
-  exec 'sb ' . s:dwm_bufs[len(s:dwm_bufs)-1]
-  on!
-  call DWM_SyncBufs()
-  if len(s:dwm_bufs) > 1
-    for idx in range(1,len(s:dwm_bufs)-1)
-      let r_idx = (len(s:dwm_bufs)-1) - idx
-      exec 'topleft sb ' . s:dwm_bufs[r_idx]
-    endfor
-  endif
-endfunction
-
-
-function! DWM_Full ()
-  exec 'sb ' .  bufnr('%')
-  on!
-endfunction
-
-function! DWM_New ()
-  call DWM_Ball()
+" Add a new buffer
+function! DWM_New()
+  " Move current master pane to the stack
+  call DWM_Stack(1)
+  " Create a vertical split
   vert topleft new
-  call DWM_SyncBufs()
-  call DWM_TopBuf(bufnr('%'))
+  call DWM_ResizeMasterPaneWidth()
 endfunction
 
-function! DWM_Close()
-  bd
-  call DWM_Ball()
-  if DWM_BufCount() > 1  
-    " we just called ball we are at the top buffer
-    let cb = s:dwm_bufs[0]
-    hide
-    exec 'vert topleft sb ' . cb
-  endif
-endfunction
-
+" Move the current window to the master pane (the previous master window is
+" added to the top of the stack)
 function! DWM_Focus()
-  call DWM_TopBuf(bufnr('%'))
-  call DWM_Ball()
-  if DWM_BufCount() > 1  
-    " we just called ball we are at the top buffer
-    let cb = s:dwm_bufs[0]
-    hide
-    exec 'vert topleft sb ' . cb
+  let l:curwin = winnr()
+  call DWM_Stack(1)
+  exec l:curwin . "wincmd w"
+  wincmd H
+  call DWM_ResizeMasterPaneWidth()
+endfunction
+
+" Close the current window
+function! DWM_Close()
+  if winnr() == 1
+    " Close master panel.
+    return 'close | wincmd H | call DWM_ResizeMasterPaneWidth()'
+  else
+    return 'close'
+  end
+endfunction
+
+function! DWM_ResizeMasterPaneWidth()
+  " resize the master pane if user defined it
+  if exists('g:dwm_master_pane_width')
+    if type(g:dwm_master_pane_width) == type("")
+      exec 'vertical resize ' . ((str2nr(g:dwm_master_pane_width)*&columns)/100)
+    else
+      exec 'vertical resize ' . g:dwm_master_pane_width
+    endif
   endif
 endfunction
 
+function! DWM_GrowMaster()
+  if winnr() == 1
+    exec "vertical resize +1"
+  else
+    exec "vertical resize -1"
+  endif
+  if exists("g:dwm_master_pane_width") && g:dwm_master_pane_width
+    let g:dwm_master_pane_width += 1
+  else
+    let g:dwm_master_pane_width = ((&columns)/2)+1
+  endif
+endfunction
+
+function! DWM_ShrinkMaster()
+  if winnr() == 1
+    exec "vertical resize -1"
+  else
+    exec "vertical resize +1"
+  endif
+  if exists("g:dwm_master_pane_width") && g:dwm_master_pane_width
+    let g:dwm_master_pane_width -= 1
+  else
+    let g:dwm_master_pane_width = ((&columns)/2)-1
+  endif
+endfunction
+
+function! DWM_Rotate(clockwise)
+  call DWM_Stack(a:clockwise)
+  if a:clockwise
+    wincmd W
+  else
+    wincmd w
+  endif
+  wincmd H
+  call DWM_ResizeMasterPaneWidth()
+endfunction
+
+nnoremap <silent> <Plug>DWMRotateCounterclockwise :call DWM_Rotate(0)<CR>
+nnoremap <silent> <Plug>DWMRotateClockwise        :call DWM_Rotate(1)<CR>
+
+nnoremap <silent> <Plug>DWMNew   :call DWM_New()<CR>
+nnoremap <silent> <Plug>DWMClose :exec DWM_Close()<CR>
+nnoremap <silent> <Plug>DWMFocus :call DWM_Focus()<CR>
+
+nnoremap <silent> <Plug>DWMGrowMaster   :call DWM_GrowMaster()<CR>
+nnoremap <silent> <Plug>DWMShrinkMaster :call DWM_ShrinkMaster()<CR>
 
 if !exists('g:dwm_map_keys')
-    let g:dwm_map_keys = 1
+  let g:dwm_map_keys = 1
 endif
 
 if g:dwm_map_keys
-    map <C-N> :call DWM_New()<CR>
-    map <C-C> :call DWM_Close()<CR>
-    map <C-H> :call DWM_Focus()<CR>
-    map <C-L> :call DWM_Full()<CR>
-    " map <C-B> :call DWM_Ball()<CR>
-    map <C-J> <C-W>w
-    map <C-K> <C-W>W
-    map <C-B> :ls<CR>
+  nnoremap <C-J> <C-W>w
+  nnoremap <C-K> <C-W>W
+
+  if !hasmapto('<Plug>DWMRotateCounterclockwise')
+      nmap <C-,> <Plug>DWMRotateCounterclockwise
+  endif
+  if !hasmapto('<Plug>DWMRotateClockwise')
+      nmap <C-.> <Plug>DWMRotateClockwise
+  endif
+
+  if !hasmapto('<Plug>DWMNew')
+      nmap <C-N> <Plug>DWMNew
+  endif
+  if !hasmapto('<Plug>DWMClose')
+      nmap <C-C> <Plug>DWMClose
+  endif
+  if !hasmapto('<Plug>DWMFocus')
+      nmap <C-@> <Plug>DWMFocus
+      nmap <C-Space> <Plug>DWMFocus
+  endif
+
+  if !hasmapto('<Plug>DWMGrowMaster')
+      nmap <C-L> <Plug>DWMGrowMaster
+  endif
+  if !hasmapto('<Plug>DWMShrinkMaster')
+      nmap <C-H> <Plug>DWMShrinkMaster
+  endif
 endif
-
-
